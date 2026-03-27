@@ -70,6 +70,12 @@ Two hooks, two jobs:
 | `PostToolUse` (Read) | When Claude reads a `SKILL.md` | Inject past lessons into context — **< 5ms, pure file I/O** |
 | `Stop` (async) | When a session ends | Distil 1–3 new lessons from transcript via haiku — **non-blocking** |
 
+**v2 distillation improvements (transparent, no config changes needed):**
+- Context-compression detection — skips distillation on summary-only sessions to prevent low-quality lessons
+- Error-seed capture — snapshots raw error signals mid-session for ground-truth distillation input
+- Intent filtering — full injection for active skill use, top-5 highlights for exploratory reads
+- Frequency-weighted eviction — high-hit entries survive; rarely-triggered but critical lessons are protected
+
 ### Harness Engineering Pattern
 
 <img src="https://raw.githubusercontent.com/yizhiyanhua-ai/fireworks-skill-memory/main/docs/harness-pattern.svg" alt="Harness pattern diagram" width="100%"/>
@@ -94,9 +100,11 @@ This is the correct engineering pattern for extending Claude Code: hook into the
 │
 └── skills/
     ├── browser-use/
-    │   └── KNOWLEDGE.md         ← skill-specific lessons (≤ 30 entries)
-    │         "Run state before every click — indices change after interaction"
-    │         "Use --profile for sites with saved logins"
+    │   ├── KNOWLEDGE.md         ← skill-specific lessons (≤ 30 entries)
+    │   │     "Run state before every click — indices change after interaction"
+    │   │     "Use --profile for sites with saved logins"
+    │   └── .error_seeds         ← transient: raw errors captured mid-session,
+    │                               consumed by Stop hook then deleted
     │
     ├── find-skills/
     │   └── KNOWLEDGE.md
