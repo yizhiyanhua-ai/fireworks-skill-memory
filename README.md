@@ -8,7 +8,7 @@
 
 Claude remembers what it learned — session after session, skill by skill.
 
-[![Version](https://img.shields.io/badge/version-3.0.0-orange.svg)](https://github.com/yizhiyanhua-ai/fireworks-skill-memory/releases)
+[![Version](https://img.shields.io/badge/version-4.0.0-orange.svg)](https://github.com/yizhiyanhua-ai/fireworks-skill-memory/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-compatible-8A2BE2)](https://claude.ai/code)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -68,20 +68,19 @@ Two hooks, two jobs:
 
 | Hook | Event | Job |
 |------|-------|-----|
+| `PreToolUse` (Skill) | Before any Skill call | Inject past lessons **before execution** — Claude plans with experience, not after mistakes |
 | `PostToolUse` (Read) | When Claude reads a `SKILL.md` | Inject past lessons into context — **< 5ms, pure file I/O** |
+| `PostToolUse` (all tools) | After every tool call | Capture error signals to session-scoped seed file — **broader coverage** |
 | `Stop` (async) | When a session ends | Distil 1–3 new lessons from transcript via haiku — **non-blocking** |
 
-**v2 distillation improvements (transparent, no config changes needed):**
-- Context-compression detection — skips distillation on summary-only sessions to prevent low-quality lessons
-- Error-seed capture — snapshots raw error signals mid-session for ground-truth distillation input
-- Intent filtering — full injection for active skill use, top-5 highlights for exploratory reads
-- Frequency-weighted eviction — high-hit entries survive; rarely-triggered but critical lessons are protected
-
-**v3 precision & efficiency improvements (2026-03-28):**
-- Keyword-free triggering — removed hardcoded keyword lists; distillation now triggers purely from skill invocations, fixing blind spots for non-English and domain-specific skills
-- Error-signal gating — haiku is only called when error/fix signals are detected in the transcript, eliminating wasted API calls on smooth sessions
-- Multi-path skill detection — recognizes skills installed via `~/.claude/skills/`, project `.skills/`, and `~/.agents/skills/`
-- Timestamped decay — entries tagged `[YYYY-MM]` auto-expire after 3 months, keeping knowledge fresh without manual cleanup
+**v4 harness optimizations (2026-04-05):**
+- Observability — every Stop hook execution is logged to `~/.claude/skill-memory.log` (timestamp, session, skills, result)
+- Broader error coverage — new `error-seed-capture.py` captures errors from ALL tool calls, not just SKILL.md reads
+- Earlier injection — new `pre-skill-inject.py` fires on `PreToolUse`, so Claude sees lessons during planning
+- Model fallback chain — if primary haiku model is deprecated, automatically tries next available model
+- Cross-session usage stats — `skill-usage-stats.json` tracks per-skill usage frequency for smarter eviction
+- Larger knowledge base — `SKILL_MAX` / `GLOBAL_MAX` expanded from 30/20 to 100 entries each
+- Context-efficient injection — active invocations inject top-20 by HIT count, not full file
 
 ### Harness Engineering Pattern
 
@@ -101,17 +100,21 @@ This is the correct engineering pattern for extending Claude Code: hook into the
 
 ```
 ~/.claude/
-├── skills-knowledge.md          ← global cross-skill principles (≤ 20 entries)
+├── skills-knowledge.md          ← global cross-skill principles (≤ 100 entries)
 │     "Test proxy connectivity before any external call"
 │     "Batch insert blocks top→bottom; never use index=0 to prepend"
 │
+├── skill-memory.log             ← Stop hook execution log (new in v4)
+├── skill-usage-stats.json       ← cross-session skill usage frequency (new in v4)
+├── error-seeds/                 ← session-scoped error seed files (new in v4)
+│   └── <session_id>.txt         ← consumed by Stop hook, then deleted
+│
 └── skills/
     ├── browser-use/
-    │   ├── KNOWLEDGE.md         ← skill-specific lessons (≤ 30 entries)
+    │   ├── KNOWLEDGE.md         ← skill-specific lessons (≤ 100 entries)
     │   │     "Run state before every click — indices change after interaction"
     │   │     "Use --profile for sites with saved logins"
-    │   └── .error_seeds         ← transient: raw errors captured mid-session,
-    │                               consumed by Stop hook then deleted
+    │   └── .error_seeds         ← legacy: raw errors from SKILL.md reads
     │
     ├── find-skills/
     │   └── KNOWLEDGE.md
@@ -182,11 +185,15 @@ All optional. Set in `~/.claude/settings.json` under `"env"`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Model used for distillation |
-| `SKILL_MAX` | `30` | Max entries per skill file |
-| `GLOBAL_MAX` | `20` | Max entries in the global file |
+| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Primary model for distillation (falls back automatically if deprecated) |
+| `SKILL_MAX` | `100` | Max entries per skill file |
+| `GLOBAL_MAX` | `100` | Max entries in the global file |
 | `TRANSCRIPT_LINES` | `300` | Lines of transcript to analyse |
 | `SKILLS_KNOWLEDGE_DIR` | `~/.claude/skills` | Root of skill directories |
+| `SKILLS_INJECT_TOP` | `20` | Max entries injected on active skill invocation (sorted by HIT count) |
+| `SKILLS_SEEDS_DIR` | `~/.claude/error-seeds` | Directory for session-scoped error seed files |
+| `SKILLS_STATS_FILE` | `~/.claude/skill-usage-stats.json` | Cross-session skill usage statistics |
+| `SKILLS_MEMORY_LOG` | `~/.claude/skill-memory.log` | Stop hook execution log path |
 
 ---
 
