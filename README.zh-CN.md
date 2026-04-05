@@ -72,6 +72,8 @@ curl -fsSL https://raw.githubusercontent.com/yizhiyanhua-ai/fireworks-skill-memo
 | `PostToolUse` (Read) | Claude 读取任意 `SKILL.md` 时 | 将历史教训注入上下文——**< 5ms，纯文件读取** |
 | `PostToolUse` (所有工具) | 每次工具调用后 | 捕获错误信号写入 session 级种子文件——**覆盖更广** |
 | `Stop` (async) | 会话结束时 | 用 haiku 从 transcript 提炼 1–3 条新教训——**不阻塞** |
+| `Stop` (async, 每日一次) | 每天会话结束时 | 检查远程仓库是否有更新，有则在下次 `SessionStart` 时提示 |
+| `SessionStart` | 会话开始时 | 显示定时任务通知 + 版本更新提醒 |
 
 **v4 harness 优化（2026-04-05，无需修改配置）：**
 - 可观测性 — 每次 Stop hook 执行结果写入 `~/.claude/skill-memory.log`（时间戳、session、skills、结果）

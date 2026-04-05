@@ -72,6 +72,8 @@ Two hooks, two jobs:
 | `PostToolUse` (Read) | When Claude reads a `SKILL.md` | Inject past lessons into context — **< 5ms, pure file I/O** |
 | `PostToolUse` (all tools) | After every tool call | Capture error signals to session-scoped seed file — **broader coverage** |
 | `Stop` (async) | When a session ends | Distil 1–3 new lessons from transcript via haiku — **non-blocking** |
+| `Stop` (async, daily) | Once per day at session end | Check remote repo for updates, notify at next `SessionStart` if available |
+| `SessionStart` | When a session begins | Show pending scheduled task notifications + update alerts |
 
 **v4 harness optimizations (2026-04-05):**
 - Observability — every Stop hook execution is logged to `~/.claude/skill-memory.log` (timestamp, session, skills, result)
