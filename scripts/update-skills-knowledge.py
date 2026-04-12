@@ -533,6 +533,14 @@ def check_for_updates() -> None:
     if UPDATE_CHECK_FILE.exists():
         if UPDATE_CHECK_FILE.read_text(encoding="utf-8").strip() == today:
             return
+
+    # Write date marker BEFORE attempting fetch to ensure "once per day" guarantee
+    # even if fetch fails/times out
+    try:
+        UPDATE_CHECK_FILE.write_text(today, encoding="utf-8")
+    except Exception:
+        return
+
     try:
         # Find the git repo containing this script
         script_dir = Path(__file__).resolve().parent
@@ -545,23 +553,24 @@ def check_for_updates() -> None:
         else:
             return  # no git repo found
 
-        # Fetch remote silently
+        # Fetch remote silently with reduced timeout (5s instead of 10s)
         fetch = subprocess.run(
             ["git", "-C", str(git_dir), "fetch", "--quiet", "origin"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=5,
             env={**os.environ, "ALL_PROXY": "socks5://127.0.0.1:7890"}
         )
         if fetch.returncode != 0:
+            log(session_id, f"UPDATE_CHECK | fetch failed: {fetch.stderr[:100]}")
             return
 
         # Compare local HEAD vs remote
         local = subprocess.run(
             ["git", "-C", str(git_dir), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=3
         ).stdout.strip()
         remote = subprocess.run(
             ["git", "-C", str(git_dir), "rev-parse", "origin/main"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=3
         ).stdout.strip()
 
         UPDATE_CHECK_FILE.write_text(today, encoding="utf-8")
