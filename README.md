@@ -4,13 +4,14 @@
 
 # fireworks-skill-memory
 
-**Persistent experience memory for Claude Code skills.**
+**Persistent experience memory for Claude Code and Codex skills.**
 
-Claude remembers what it learned — session after session, skill by skill.
+Shared memory core, runtime-specific adapters, skill-scoped lessons.
 
 [![Version](https://img.shields.io/badge/version-4.0.0-orange.svg)](https://github.com/yizhiyanhua-ai/fireworks-skill-memory/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-compatible-8A2BE2)](https://claude.ai/code)
+[![Codex](https://img.shields.io/badge/Codex-compatible-111111)](https://openai.com)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://python.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/yizhiyanhua-ai/fireworks-skill-memory/pulls)
 
@@ -22,7 +23,7 @@ Claude remembers what it learned — session after session, skill by skill.
 
 ## The Problem
 
-Every Claude Code session starts from zero. The same mistakes repeat — wrong API parameters, broken sequences, proxy pitfalls — because Claude has no memory between sessions.
+Every coding-agent session starts from zero. The same mistakes repeat — wrong API parameters, broken sequences, proxy pitfalls — because the runtime has no durable skill memory between sessions.
 
 ```
 Session 1:  "Don't forget — use index=0 for Feishu blocks"   ✓ works
@@ -32,7 +33,7 @@ Session 3:  same mistake again                                ✗ forgot
 
 ## The Solution
 
-`fireworks-skill-memory` gives Claude a persistent, skill-scoped memory that grows smarter with every session — automatically, in the background, with zero impact on your workflow.
+`fireworks-skill-memory` gives Claude Code and Codex a persistent, skill-scoped memory that grows smarter with every session. The storage layer is shared; the hook and flush flows are runtime-specific.
 
 ```
 Session 1:  mistake happens → lesson saved automatically
@@ -44,7 +45,9 @@ Session 3:  lesson still there, more lessons added            ✓ keeps improvin
 
 ## Install
 
-**In Claude Code, just say:**
+### Claude Code
+
+In Claude Code, just say:
 
 > *"Help me install fireworks-skill-memory from https://github.com/yizhiyanhua-ai/fireworks-skill-memory"*
 
@@ -56,6 +59,22 @@ curl -fsSL https://raw.githubusercontent.com/yizhiyanhua-ai/fireworks-skill-memo
 
 Then type `/hooks` in Claude Code to activate. No config files to edit manually.
 
+### Codex
+
+Codex does not use Claude-style hooks. The current integration path is explicit and runtime-driven:
+
+```bash
+python3 cli/skill_memory.py inject --skill lark-sync
+python3 cli/skill_memory.py checkpoint --skill lark-sync --note "..."
+python3 cli/skill_memory.py flush --skill lark-sync --summary-file ./session-summary.md
+```
+
+Codex memory defaults to:
+
+```text
+$CODEX_HOME/memories/fireworks-skill-memory/
+```
+
 ---
 
 ## Architecture
@@ -64,7 +83,7 @@ Then type `/hooks` in Claude Code to activate. No config files to edit manually.
 
 <img src="https://raw.githubusercontent.com/yizhiyanhua-ai/fireworks-skill-memory/main/docs/architecture.svg" alt="Architecture diagram" width="100%"/>
 
-Two hooks, two jobs:
+Two runtimes, one shared memory core:
 
 | Hook | Event | Job |
 |------|-------|-----|
@@ -74,6 +93,33 @@ Two hooks, two jobs:
 | `Stop` (async) | When a session ends | Distil 1–3 new lessons from transcript via haiku — **non-blocking** |
 | `Stop` (async, daily) | Once per day at session end | Check remote repo for updates, notify at next `SessionStart` if available |
 | `SessionStart` | When a session begins | Show pending scheduled task notifications + update alerts |
+
+Codex currently uses explicit commands instead of hooks:
+
+| Runtime | Entry point | Job |
+|---------|-------------|-----|
+| `Codex` | `inject` | Prefix a task with the top ranked skill lessons |
+| `Codex` | `checkpoint` | Save raw notes under the skill directory for later distillation |
+| `Codex` | `flush` | Distil explicit lessons from summary/session sources back into `KNOWLEDGE.md` |
+
+### Runtime Split
+
+```text
+memory_core/
+  store.py           # skill/global knowledge storage, merge, eviction
+  transcript.py      # transcript parsing helpers
+
+runtimes/
+  claude_runtime.py  # Claude transcript provider + Claude CLI distiller
+  codex_runtime.py   # Codex checkpoint/flush provider
+
+scripts/             # thin Claude hook adapters
+cli/                 # thin Codex/manual adapter
+```
+
+Distillation is now behind a shared interface. The Claude runtime currently uses the `ClaudeCliDistiller` backend; Codex explicit flows remain local until you attach another backend.
+
+The backend selector lives in `memory_core/distiller.py`. `OpenAIDistiller` now has stronger real-world debugging support: it parses more OpenAI-compatible response shapes, records structured HTTP/body failures, and emits raw-response previews through `SKILLS_DISTILLER_DEBUG` or `SKILLS_DISTILLER_LOG`.
 
 **v4 harness optimizations (2026-04-05):**
 - Observability — every Stop hook execution is logged to `~/.claude/skill-memory.log` (timestamp, session, skills, result)
@@ -100,29 +146,22 @@ This is the correct engineering pattern for extending Claude Code: hook into the
 
 ## Knowledge Structure
 
-```
-~/.claude/
-├── skills-knowledge.md          ← global cross-skill principles (≤ 100 entries)
-│     "Test proxy connectivity before any external call"
-│     "Batch insert blocks top→bottom; never use index=0 to prepend"
-│
-├── skill-memory.log             ← Stop hook execution log (new in v4)
-├── skill-usage-stats.json       ← cross-session skill usage frequency (new in v4)
-├── error-seeds/                 ← session-scoped error seed files (new in v4)
-│   └── <session_id>.txt         ← consumed by Stop hook, then deleted
-│
+```text
+<memory-home>/
+├── global/KNOWLEDGE.md          ← global cross-skill principles
 └── skills/
     ├── browser-use/
-    │   ├── KNOWLEDGE.md         ← skill-specific lessons (≤ 100 entries)
-    │   │     "Run state before every click — indices change after interaction"
-    │   │     "Use --profile for sites with saved logins"
-    │   └── .error_seeds         ← legacy: raw errors from SKILL.md reads
-    │
-    ├── find-skills/
-    │   └── KNOWLEDGE.md
-    │
+    │   ├── KNOWLEDGE.md         ← distilled skill-specific lessons
+    │   └── CHECKPOINTS.md       ← raw runtime notes, not injected by default
     └── {any-skill}/
-        └── KNOWLEDGE.md         ← auto-created on first lesson
+        ├── KNOWLEDGE.md
+        └── CHECKPOINTS.md
+
+Legacy Claude runtime state remains under `~/.claude/`:
+~/.claude/skills/<skill>/KNOWLEDGE.md
+~/.claude/error-seeds/<session_id>.txt
+~/.claude/skill-memory.log
+~/.claude/skill-usage-stats.json
 ```
 
 **Two-layer design:**
@@ -152,7 +191,7 @@ Example entries that accumulate over real usage:
 
 ## Included Starter Knowledge
 
-Ready-made lesson files for Claude Code's official skills — included out of the box:
+Ready-made lesson files for Claude Code's official skills are included out of the box. Codex can read the same lessons through the shared memory core or Claude fallback paths.
 
 | Skill | Pre-loaded lessons |
 |-------|-------------------|
@@ -173,9 +212,9 @@ Ready-made lesson files for Claude Code's official skills — included out of th
 | | Detail |
 |--|--------|
 | 📍 **Data location** | Everything stays on your machine — no cloud, no uploads |
-| 📄 **Transcript access** | Reads only JSONL files Claude Code already stores locally |
+| 📄 **Transcript access** | Claude runtime reads local Claude JSONL transcripts; Codex runtime currently uses explicit summary/session inputs |
 | 🔑 **Secrets** | Distillation prompt explicitly excludes credentials and personal data |
-| 🤖 **API calls** | Runs through your existing Claude Code auth — no third-party endpoints |
+| 🤖 **API calls** | Claude distillation runs through your existing Claude Code auth; Codex explicit flows stay local unless you add a model backend |
 
 See [SECURITY.md](SECURITY.md) for the full security policy.
 
@@ -187,7 +226,10 @@ All optional. Set in `~/.claude/settings.json` under `"env"`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Primary model for distillation (falls back automatically if deprecated) |
+| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Default model for the Claude CLI distiller backend (falls back automatically if deprecated) |
+| `SKILLS_DISTILLER_BACKEND` | `claude-cli` | Distiller backend selector: `claude-cli`, `openai`, or `null` |
+| `SKILLS_DISTILLER_DEBUG` | unset | When set to `1`/`true`, write backend debug logs to `~/.claude/skill-memory-distiller.log` |
+| `SKILLS_DISTILLER_LOG` | unset | Optional explicit path for distiller debug logs |
 | `SKILL_MAX` | `100` | Max entries per skill file |
 | `GLOBAL_MAX` | `100` | Max entries in the global file |
 | `TRANSCRIPT_LINES` | `300` | Lines of transcript to analyse |
@@ -196,6 +238,73 @@ All optional. Set in `~/.claude/settings.json` under `"env"`:
 | `SKILLS_SEEDS_DIR` | `~/.claude/error-seeds` | Directory for session-scoped error seed files |
 | `SKILLS_STATS_FILE` | `~/.claude/skill-usage-stats.json` | Cross-session skill usage statistics |
 | `SKILLS_MEMORY_LOG` | `~/.claude/skill-memory.log` | Stop hook execution log path |
+
+When using the `openai` backend, also set:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | none | API key for the OpenAI distiller backend |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL for OpenAI-compatible chat completions |
+| `OPENAI_MODEL` | `gpt-5.4` | Model name for the OpenAI distiller backend |
+
+For real debugging, enable either:
+
+- `SKILLS_DISTILLER_DEBUG=1`
+- `SKILLS_DISTILLER_LOG=/absolute/path/to/distiller.log`
+
+---
+
+## Codex Runtime
+
+Shared storage defaults to:
+
+```text
+$CODEX_HOME/memories/fireworks-skill-memory/   # when running inside Codex
+~/.ai-memory/                                  # otherwise
+```
+
+Directory layout:
+
+```text
+<memory-home>/
+├── global/KNOWLEDGE.md
+└── skills/
+    └── <skill>/KNOWLEDGE.md
+```
+
+Legacy Claude skill knowledge under `~/.claude/skills/<skill>/KNOWLEDGE.md` is still read as a fallback.
+
+Use the CLI directly:
+
+```bash
+python3 cli/skill_memory.py inject --skill lark-sync
+python3 cli/skill_memory.py checkpoint --skill lark-sync --note "Feishu local image embeds must be uploaded first"
+python3 cli/skill_memory.py flush --skill lark-sync --summary-file ./session-summary.md
+python3 cli/skill_memory.py flush --skill lark-sync --session-file ./codex-session.jsonl
+cat session-summary.md | python3 cli/skill_memory.py flush --skill lark-sync --stdin
+python3 cli/skill_memory.py show --skill lark-sync
+```
+
+Recommended summary format for `flush`:
+
+```md
+# Session Summary
+
+## Lessons
+
+- Verify effective scopes before wiki writes
+- `docs +create` does not resolve Obsidian local image embeds
+- Replace `![[...]]` with `<image token="..."/>` before overwrite sync
+```
+
+Current commands:
+
+- `inject` — prints a plain-text experience block suitable for prefixing into a Codex task
+- `checkpoint` — appends raw session notes under the skill directory for later distillation
+- `flush` — distils at most 3 explicit lessons from a summary file, session export, or stdin into `KNOWLEDGE.md`; it only reads lesson-style sections such as `## Lessons`, `## Takeaways`, or `## 经验沉淀`. Checkpoints stay separate unless `--include-checkpoints` is passed
+- `show` — prints the current `KNOWLEDGE.md` for a skill, with Claude fallback support
+
+Codex remains explicit by design for now: distilled knowledge is loaded progressively per skill, while raw notes stay in `CHECKPOINTS.md` until you intentionally flush them.
 
 ---
 

@@ -1,21 +1,21 @@
 ---
 name: fireworks-skill-memory
-description: Persistent cross-session experience memory for Claude Code skills. TRIGGER when user asks about skill memory, experience distillation, cross-session learning, skill knowledge injection, Claude memory, session-to-session improvement, or wants to install/configure fireworks-skill-memory.
+description: Persistent cross-session experience memory for Claude Code and Codex skills. TRIGGER when user asks about skill memory, experience distillation, cross-session learning, skill knowledge injection, Claude/Codex memory, session-to-session improvement, or wants to install/configure fireworks-skill-memory.
 ---
 
 # fireworks-skill-memory
 
-Persistent experience memory for Claude Code skills. Claude remembers what it learned — session after session, skill by skill.
+Persistent experience memory for Claude Code and Codex skills. Shared memory core, runtime-specific adapters, skill-scoped lessons.
 
 ## What It Does
 
-Every Claude Code session starts from zero. The same mistakes repeat — wrong API parameters, broken sequences, proxy pitfalls — because Claude has no memory between sessions.
+Every coding-agent session starts from zero. The same mistakes repeat — wrong API parameters, broken sequences, proxy pitfalls — because the runtime has no durable skill memory between sessions.
 
-`fireworks-skill-memory` solves this by automatically:
+`fireworks-skill-memory` solves this by:
 
-1. **Injecting past experience** when a skill is invoked (so Claude avoids repeating mistakes)
-2. **Distilling new lessons** at session end (using Claude Haiku, async, zero workflow impact)
-3. **Growing smarter over time** with HIT-counted entries and age-based eviction
+1. **Injecting past experience** when a skill is invoked
+2. **Distilling new lessons** into skill-scoped knowledge files
+3. **Keeping runtime-specific adapters thin** so Claude hooks and Codex explicit flows share one memory core
 
 ## Installation
 
@@ -43,9 +43,25 @@ After installing via npx skills, run the installer to set up hooks:
 curl -fsSL https://raw.githubusercontent.com/yizhiyanhua-ai/fireworks-skill-memory/main/install.sh | bash
 ```
 
+### Codex Setup
+
+Run:
+
+```bash
+./install-codex.sh
+```
+
+Then use:
+
+```bash
+python3 cli/skill_memory.py inject --skill <skill-name>
+python3 cli/skill_memory.py checkpoint --skill <skill-name> --note "..."
+python3 cli/skill_memory.py flush --skill <skill-name> --summary-file ./session-summary.md
+```
+
 ## How It Works
 
-The system installs 4 Claude Code hooks that run automatically:
+Claude Code installs 4 hooks that run automatically:
 
 | Hook | Trigger | Script | Purpose |
 |------|---------|--------|---------|
@@ -53,6 +69,14 @@ The system installs 4 Claude Code hooks that run automatically:
 | `PostToolUse` | After Read SKILL.md | `inject-skill-knowledge.py` | Inject top-N entries by relevance + capture error seeds |
 | `PostToolUse` | After any tool call | `error-seed-capture.py` | Capture error signals to session-scoped file |
 | `Stop` | Session end (async) | `update-skills-knowledge.py` | Distill new lessons via Haiku, update KNOWLEDGE.md |
+
+Codex uses explicit runtime commands instead:
+
+| Command | Purpose |
+|---------|---------|
+| `inject` | Load top-ranked lessons for a skill before a task |
+| `checkpoint` | Save raw notes into the skill directory |
+| `flush` | Distill explicit lesson sections from summary/session inputs into `KNOWLEDGE.md` |
 
 ### Data Flow
 
@@ -64,13 +88,25 @@ Session ends → Stop hook reads transcript → Haiku distills 1-3 lessons
                               KNOWLEDGE.md updated → Ready for next session
 ```
 
+```text
+Codex task starts → inject loads top lessons → Codex executes with context
+                                                ↓
+Checkpoint/summary captured → flush distills explicit lessons
+                                                ↓
+                      KNOWLEDGE.md updated → Ready for next session
+```
+
 ### Knowledge Storage
 
-```
-~/.claude/skills/<skill-name>/KNOWLEDGE.md  ← Per-skill experience (max 100 entries)
-~/.claude/skills-knowledge.md               ← Global cross-skill principles (max 100 entries)
-~/.claude/skill-usage-stats.json            ← Usage frequency stats
-~/.claude/skill-memory.log                  ← Execution log
+```text
+<memory-home>/skills/<skill-name>/KNOWLEDGE.md   ← Distilled per-skill experience
+<memory-home>/skills/<skill-name>/CHECKPOINTS.md ← Raw runtime notes
+<memory-home>/global/KNOWLEDGE.md                ← Global cross-skill principles
+
+Claude legacy runtime also uses:
+~/.claude/skills/<skill-name>/KNOWLEDGE.md
+~/.claude/skill-usage-stats.json
+~/.claude/skill-memory.log
 ```
 
 Each entry is tagged with `[YYYY-MM]` timestamp and `[HIT:N]` usage counter. Low-frequency, old entries are evicted first.
@@ -81,7 +117,10 @@ All settings are optional, configured via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Model for distillation |
+| `SKILLS_KNOWLEDGE_MODEL` | `claude-haiku-4-5` | Default model for the Claude CLI distiller backend |
+| `SKILLS_DISTILLER_BACKEND` | `claude-cli` | Distiller backend selector: `claude-cli`, `openai`, or `null` |
+| `SKILLS_DISTILLER_DEBUG` | unset | Enable backend debug logging to the default distiller log file |
+| `SKILLS_DISTILLER_LOG` | unset | Explicit path for distiller debug logs |
 | `SKILL_MAX` | `100` | Max entries per skill |
 | `GLOBAL_MAX` | `100` | Max global entries |
 | `MIN_TOOL_CALLS` | `5` | Skip sessions with fewer calls (likely summaries) |
@@ -90,8 +129,11 @@ All settings are optional, configured via environment variables:
 ## Requirements
 
 - Python 3.9+
-- Claude Code CLI
-- Claude Haiku access (for distillation; falls back through haiku-4-5 → haiku-3-5)
+- Claude Code CLI for the automatic Claude runtime
+- Claude Haiku access for the default Claude CLI distiller backend
+- `CODEX_HOME` for the Codex runtime setup helper
+- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` when using the OpenAI distiller backend
+- `SKILLS_DISTILLER_DEBUG` or `SKILLS_DISTILLER_LOG` when debugging backend failures
 
 ## More Information
 

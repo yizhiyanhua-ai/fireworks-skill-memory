@@ -46,10 +46,11 @@ import re
 import sys
 from pathlib import Path
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-SKILLS_DIR = Path(
-    os.environ.get("SKILLS_KNOWLEDGE_DIR", Path.home() / ".claude" / "skills")
-)
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from memory_core.store import get_paths, select_injection_entries
 
 # [Opt-6] Multi-path skill detection — support skills installed under various paths
 SKILL_PATH_PATTERNS = [
@@ -57,6 +58,8 @@ SKILL_PATH_PATTERNS = [
     r'/.skills/([^/]+)/',
     r'/.agents/skills/([^/]+)/',
 ]
+
+SKILLS_DIR = get_paths().legacy_skills_dir
 
 # ── Read hook input ────────────────────────────────────────────────────────────
 try:
@@ -147,45 +150,18 @@ if has_error and result_content.strip():
     except Exception:
         pass
 
-# ── Load the skill's KNOWLEDGE.md ─────────────────────────────────────────────
-knowledge_file = SKILLS_DIR / skill_name / "KNOWLEDGE.md"
-if not knowledge_file.exists():
-    sys.exit(0)
-
-knowledge_content = knowledge_file.read_text(encoding="utf-8").strip()
-if not knowledge_content:
-    sys.exit(0)
-
-# ── [Opt-3] Selective injection based on intent ────────────────────────────────
-TOP_INJECT = int(os.environ.get("SKILLS_INJECT_TOP", "20"))
-
-def _get_hit_count(entry: str) -> int:
-    import re as _re
-    m = _re.search(r"\[HIT:(\d+)\]", entry)
-    return int(m.group(1)) if m else 0
-
 if is_active_invocation:
-    # Active invocation: inject top-N by HIT count (context-efficient for large knowledge bases)
-    bullet_lines = [
-        ln for ln in knowledge_content.splitlines()
-        if ln.strip().startswith("- ")
-    ]
-    bullet_lines.sort(key=_get_hit_count, reverse=True)
-    top_lines = bullet_lines[:TOP_INJECT]
-    if not top_lines:
+    top_n = int(os.environ.get("SKILLS_INJECT_TOP", "20"))
+    active_entries = select_injection_entries(skill_name, top_n=top_n)
+    if not active_entries:
         sys.exit(0)
-    injection_body = "\n".join(top_lines)
-    injection_note = f"top-{len(top_lines)} by relevance (active invocation)"
+    injection_body = "\n".join(active_entries)
+    injection_note = f"top-{len(active_entries)} by relevance (active invocation)"
 else:
-    # Condensed injection: exploratory read — only inject summary header
-    # Extract the first 5 bullet entries to avoid overwhelming context
-    bullet_lines = [
-        ln for ln in knowledge_content.splitlines()
-        if ln.strip().startswith("- ")
-    ][:5]
-    if not bullet_lines:
+    exploratory_entries = select_injection_entries(skill_name, top_n=5)
+    if not exploratory_entries:
         sys.exit(0)
-    injection_body = "\n".join(bullet_lines)
+    injection_body = "\n".join(exploratory_entries)
     injection_note = "top-5 highlights (exploratory read)"
 
 # ── Inject into model context via additionalContext ───────────────────────────

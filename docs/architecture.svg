@@ -1,174 +1,167 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720">
   <defs>
     <style>
       text { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; }
+      .title { font-size: 16px; fill: #f8fafc; font-weight: 700; }
+      .section { font-size: 12px; fill: #93c5fd; font-weight: 700; letter-spacing: 0.8px; }
       .label { font-size: 12px; fill: #e2e8f0; }
-      .title { font-size: 13px; fill: #f8fafc; font-weight: bold; }
       .sub { font-size: 10px; fill: #94a3b8; }
       .code { font-size: 10px; fill: #7dd3fc; }
-      .highlight { font-size: 11px; fill: #fbbf24; }
-      .arrow { stroke: #475569; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
-      .arrow-blue { stroke: #3b82f6; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-blue); }
-      .arrow-purple { stroke: #8b5cf6; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-purple); }
-      .arrow-green { stroke: #10b981; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-green); }
+      .accent { font-size: 10px; fill: #fbbf24; }
+      .arrow { stroke: #475569; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .arrow-blue { stroke: #3b82f6; stroke-width: 1.8; fill: none; marker-end: url(#arrow-blue); }
+      .arrow-purple { stroke: #8b5cf6; stroke-width: 1.8; fill: none; marker-end: url(#arrow-purple); }
+      .arrow-green { stroke: #10b981; stroke-width: 1.8; fill: none; marker-end: url(#arrow-green); }
+      .arrow-amber { stroke: #f59e0b; stroke-width: 1.8; fill: none; marker-end: url(#arrow-amber); }
     </style>
-    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
       <polygon points="0 0, 8 3, 0 6" fill="#475569"/>
     </marker>
-    <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
       <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
     </marker>
-    <marker id="arrowhead-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+    <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
       <polygon points="0 0, 8 3, 0 6" fill="#8b5cf6"/>
     </marker>
-    <marker id="arrowhead-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
       <polygon points="0 0, 8 3, 0 6" fill="#10b981"/>
     </marker>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <marker id="arrow-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#f59e0b"/>
+    </marker>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#0f172a"/>
-      <stop offset="100%" style="stop-color:#1e293b"/>
+      <stop offset="100%" style="stop-color:#111827"/>
     </linearGradient>
-    <linearGradient id="boxBlue" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e3a5f"/>
-      <stop offset="100%" style="stop-color:#1e2d4a"/>
+    <linearGradient id="blueBox" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1d4ed8"/>
+      <stop offset="100%" style="stop-color:#1e3a8a"/>
     </linearGradient>
-    <linearGradient id="boxPurple" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#2d1b5e"/>
-      <stop offset="100%" style="stop-color:#1f1245"/>
+    <linearGradient id="purpleBox" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6d28d9"/>
+      <stop offset="100%" style="stop-color:#4c1d95"/>
     </linearGradient>
-    <linearGradient id="boxGreen" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#064e3b"/>
-      <stop offset="100%" style="stop-color:#022c22"/>
+    <linearGradient id="greenBox" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#065f46"/>
     </linearGradient>
-    <linearGradient id="boxAmber" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#451a03"/>
-      <stop offset="100%" style="stop-color:#2d1200"/>
+    <linearGradient id="amberBox" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#d97706"/>
+      <stop offset="100%" style="stop-color:#92400e"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
-  <!-- Background -->
-  <rect width="900" height="520" fill="url(#bgGrad)" rx="12"/>
-  <rect width="900" height="520" fill="none" stroke="#334155" stroke-width="1" rx="12"/>
+  <rect width="1200" height="720" fill="url(#bg)" rx="18"/>
+  <rect x="1" y="1" width="1198" height="718" fill="none" stroke="#334155" stroke-width="1.2" rx="18"/>
 
-  <!-- Title -->
-  <text x="450" y="34" text-anchor="middle" font-size="15" fill="#f8fafc" font-weight="bold" font-family="'SF Mono','Fira Code',monospace">fireworks-skill-memory — Architecture Overview</text>
-  <line x1="60" y1="46" x2="840" y2="46" stroke="#334155" stroke-width="1"/>
+  <text x="600" y="34" text-anchor="middle" class="title">fireworks-skill-memory — Dual Runtime + Shared Distiller Architecture</text>
+  <text x="600" y="54" text-anchor="middle" class="sub">Claude Code hooks and Codex explicit commands share one memory core, one lesson format, and one backend selector.</text>
+  <line x1="56" y1="72" x2="1144" y2="72" stroke="#334155" stroke-width="1"/>
 
-  <!-- ===== LEFT SIDE: INJECTION FLOW ===== -->
-  <!-- Section label -->
-  <text x="215" y="72" text-anchor="middle" font-size="11" fill="#3b82f6" font-family="'SF Mono','Fira Code',monospace">① SKILL INVOCATION (real-time)</text>
+  <text x="210" y="102" text-anchor="middle" class="section">CLAUDE RUNTIME</text>
+  <text x="600" y="102" text-anchor="middle" class="section">SHARED MEMORY CORE</text>
+  <text x="990" y="102" text-anchor="middle" class="section">CODEX RUNTIME</text>
 
-  <!-- User box -->
-  <rect x="60" y="82" width="140" height="44" rx="6" fill="url(#boxBlue)" stroke="#3b82f6" stroke-width="1.2"/>
-  <text x="130" y="100" text-anchor="middle" class="title">User</text>
-  <text x="130" y="116" text-anchor="middle" class="sub">invokes a skill</text>
+  <rect x="60" y="122" width="300" height="238" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
+  <rect x="450" y="122" width="300" height="238" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
+  <rect x="840" y="122" width="300" height="238" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
 
-  <!-- Arrow down -->
-  <line x1="130" y1="126" x2="130" y2="156" class="arrow-blue"/>
+  <rect x="84" y="146" width="116" height="54" rx="8" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="1.2"/>
+  <text x="142" y="168" text-anchor="middle" class="label">PreToolUse</text>
+  <text x="142" y="184" text-anchor="middle" class="code">pre-skill-inject.py</text>
 
-  <!-- Claude reads SKILL.md -->
-  <rect x="60" y="156" width="140" height="44" rx="6" fill="url(#boxBlue)" stroke="#3b82f6" stroke-width="1.2"/>
-  <text x="130" y="174" text-anchor="middle" class="title">Claude</text>
-  <text x="130" y="190" text-anchor="middle" class="code">reads SKILL.md</text>
+  <rect x="84" y="222" width="116" height="54" rx="8" fill="url(#purpleBox)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="142" y="244" text-anchor="middle" class="label">PostToolUse</text>
+  <text x="142" y="260" text-anchor="middle" class="code">inject-skill-knowledge.py</text>
 
-  <!-- Arrow right to hook -->
-  <line x1="200" y1="178" x2="256" y2="178" class="arrow-blue"/>
-  <text x="228" y="170" text-anchor="middle" class="sub">triggers</text>
+  <rect x="84" y="298" width="116" height="42" rx="8" fill="url(#purpleBox)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="142" y="324" text-anchor="middle" class="label">error-seed-capture.py</text>
 
-  <!-- PostToolUse Hook box -->
-  <rect x="256" y="156" width="148" height="44" rx="6" fill="url(#boxPurple)" stroke="#8b5cf6" stroke-width="1.2"/>
-  <text x="330" y="172" text-anchor="middle" class="title" fill="#c4b5fd">PostToolUse Hook</text>
-  <text x="330" y="188" text-anchor="middle" class="code">inject-skill-knowledge.py</text>
+  <rect x="226" y="184" width="110" height="98" rx="8" fill="url(#greenBox)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="281" y="208" text-anchor="middle" class="label">Stop Hook</text>
+  <text x="281" y="224" text-anchor="middle" class="code">update-skills-knowledge.py</text>
+  <text x="281" y="242" text-anchor="middle" class="sub">load transcript</text>
+  <text x="281" y="256" text-anchor="middle" class="sub">analyze usage + errors</text>
+  <text x="281" y="270" text-anchor="middle" class="sub">merge distilled lessons</text>
 
-  <!-- Arrow down from hook -->
-  <line x1="330" y1="200" x2="330" y2="230" class="arrow-purple"/>
+  <rect x="474" y="146" width="118" height="58" rx="8" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="1.2"/>
+  <text x="533" y="170" text-anchor="middle" class="label">store.py</text>
+  <text x="533" y="186" text-anchor="middle" class="sub">KNOWLEDGE.md</text>
+  <text x="533" y="198" text-anchor="middle" class="sub">CHECKPOINTS.md</text>
 
-  <!-- KNOWLEDGE.md read -->
-  <rect x="256" y="230" width="148" height="44" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1" stroke-dasharray="4,3"/>
-  <text x="330" y="248" text-anchor="middle" class="title" fill="#94a3b8">KNOWLEDGE.md</text>
-  <text x="330" y="264" text-anchor="middle" class="sub">~/.claude/skills/{name}/</text>
+  <rect x="604" y="146" width="122" height="58" rx="8" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="1.2"/>
+  <text x="665" y="170" text-anchor="middle" class="label">transcript.py</text>
+  <text x="665" y="186" text-anchor="middle" class="sub">skill detection</text>
+  <text x="665" y="198" text-anchor="middle" class="sub">error signal parsing</text>
 
-  <!-- Arrow left back to Claude -->
-  <line x1="256" y1="252" x2="200" y2="220" class="arrow-blue"/>
-  <text x="222" y="244" text-anchor="middle" class="sub" fill="#fbbf24">additionalContext</text>
+  <rect x="474" y="226" width="252" height="114" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="600" y="248" text-anchor="middle" class="label">distiller.py</text>
+  <text x="600" y="266" text-anchor="middle" class="sub">Distiller interface + backend selector</text>
+  <text x="600" y="286" text-anchor="middle" class="code">ClaudeCliDistiller</text>
+  <text x="600" y="302" text-anchor="middle" class="code">OpenAIDistiller</text>
+  <text x="600" y="318" text-anchor="middle" class="code">NullDistiller</text>
 
-  <!-- Claude responds -->
-  <rect x="60" y="290" width="140" height="44" rx="6" fill="url(#boxGreen)" stroke="#10b981" stroke-width="1.2"/>
-  <text x="130" y="308" text-anchor="middle" class="title" fill="#6ee7b7">Claude responds</text>
-  <text x="130" y="324" text-anchor="middle" class="sub">with past lessons</text>
-  <line x1="130" y1="234" x2="130" y2="290" class="arrow-green"/>
+  <rect x="864" y="146" width="116" height="54" rx="8" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="1.2"/>
+  <text x="922" y="168" text-anchor="middle" class="label">inject</text>
+  <text x="922" y="184" text-anchor="middle" class="code">top-ranked lessons</text>
 
-  <!-- ===== DIVIDER ===== -->
-  <line x1="450" y1="55" x2="450" y2="490" stroke="#334155" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="864" y="222" width="116" height="54" rx="8" fill="url(#purpleBox)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="922" y="244" text-anchor="middle" class="label">checkpoint</text>
+  <text x="922" y="260" text-anchor="middle" class="code">raw session notes</text>
 
-  <!-- ===== RIGHT SIDE: DISTILLATION FLOW ===== -->
-  <text x="675" y="72" text-anchor="middle" font-size="11" fill="#10b981" font-family="'SF Mono','Fira Code',monospace">② SESSION DISTILLATION (async)</text>
+  <rect x="1000" y="184" width="116" height="98" rx="8" fill="url(#greenBox)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="1058" y="208" text-anchor="middle" class="label">flush</text>
+  <text x="1058" y="224" text-anchor="middle" class="code">summary / session / stdin</text>
+  <text x="1058" y="242" text-anchor="middle" class="sub">extract explicit lessons</text>
+  <text x="1058" y="256" text-anchor="middle" class="sub">write back to knowledge</text>
+  <text x="1058" y="270" text-anchor="middle" class="sub">without full transcript hooks</text>
 
-  <!-- Session ends -->
-  <rect x="600" y="82" width="140" height="44" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1.2"/>
-  <text x="670" y="100" text-anchor="middle" class="title">Session ends</text>
-  <text x="670" y="116" text-anchor="middle" class="sub">user closes window</text>
+  <line x1="200" y1="173" x2="474" y2="173" class="arrow-blue"/>
+  <line x1="200" y1="249" x2="474" y2="173" class="arrow-blue"/>
+  <line x1="200" y1="319" x2="474" y2="285" class="arrow-purple"/>
+  <line x1="336" y1="233" x2="474" y2="285" class="arrow-green"/>
 
-  <!-- Arrow down -->
-  <line x1="670" y1="126" x2="670" y2="156" class="arrow"/>
+  <line x1="726" y1="173" x2="864" y2="173" class="arrow-blue"/>
+  <line x1="592" y1="173" x2="864" y2="249" class="arrow-purple"/>
+  <line x1="726" y1="285" x2="1000" y2="233" class="arrow-green"/>
 
-  <!-- Stop Hook -->
-  <rect x="600" y="156" width="140" height="44" rx="6" fill="url(#boxPurple)" stroke="#8b5cf6" stroke-width="1.2"/>
-  <text x="670" y="172" text-anchor="middle" class="title" fill="#c4b5fd">Stop Hook</text>
-  <text x="670" y="188" text-anchor="middle" class="code">async: true</text>
+  <text x="600" y="386" text-anchor="middle" class="section">BACKEND SELECTION + OBSERVABILITY</text>
+  <rect x="60" y="404" width="1080" height="114" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
 
-  <!-- Arrow down -->
-  <line x1="670" y1="200" x2="670" y2="230" class="arrow-purple"/>
+  <rect x="94" y="432" width="168" height="54" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="178" y="454" text-anchor="middle" class="label">SKILLS_DISTILLER_BACKEND</text>
+  <text x="178" y="470" text-anchor="middle" class="code">claude-cli | openai | null</text>
 
-  <!-- Script box -->
-  <rect x="582" y="230" width="176" height="60" rx="6" fill="url(#boxPurple)" stroke="#8b5cf6" stroke-width="1.2"/>
-  <text x="670" y="250" text-anchor="middle" class="title" fill="#c4b5fd">update-skills-knowledge.py</text>
-  <text x="670" y="265" text-anchor="middle" class="sub">reads transcript (last 300 lines)</text>
-  <text x="670" y="279" text-anchor="middle" class="sub">detects skill usage</text>
+  <rect x="320" y="432" width="176" height="54" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="408" y="454" text-anchor="middle" class="label">Claude CLI backend</text>
+  <text x="408" y="470" text-anchor="middle" class="sub">fallback model chain</text>
 
-  <!-- Arrow down -->
-  <line x1="670" y1="290" x2="670" y2="318" class="arrow-purple"/>
+  <rect x="514" y="422" width="212" height="74" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="620" y="444" text-anchor="middle" class="label">OpenAI backend</text>
+  <text x="620" y="460" text-anchor="middle" class="code">OPENAI_API_KEY / BASE_URL / MODEL</text>
+  <text x="620" y="476" text-anchor="middle" class="sub">chat.completions parsing + raw preview + HTTP/body logs</text>
 
-  <!-- Haiku model -->
-  <rect x="600" y="318" width="140" height="44" rx="6" fill="url(#boxAmber)" stroke="#f59e0b" stroke-width="1.2"/>
-  <text x="670" y="336" text-anchor="middle" class="title" fill="#fcd34d">claude-haiku-4-5</text>
-  <text x="670" y="352" text-anchor="middle" class="sub">extracts 1-3 lessons</text>
+  <rect x="754" y="432" width="156" height="54" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="832" y="454" text-anchor="middle" class="label">Null backend</text>
+  <text x="832" y="470" text-anchor="middle" class="sub">safe SKIP for dry runs</text>
 
-  <!-- Arrow down -->
-  <line x1="670" y1="362" x2="670" y2="390" class="arrow-green"/>
+  <rect x="948" y="422" width="162" height="74" rx="8" fill="url(#greenBox)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="1029" y="444" text-anchor="middle" class="label">Debug logs</text>
+  <text x="1029" y="460" text-anchor="middle" class="code">SKILLS_DISTILLER_DEBUG / LOG</text>
+  <text x="1029" y="476" text-anchor="middle" class="sub">DISTILLER_ERR + DISTILLER_RAW</text>
 
-  <!-- KNOWLEDGE.md write -->
-  <rect x="582" y="390" width="176" height="44" rx="6" fill="url(#boxGreen)" stroke="#10b981" stroke-width="1.2"/>
-  <text x="670" y="408" text-anchor="middle" class="title" fill="#6ee7b7">KNOWLEDGE.md updated</text>
-  <text x="670" y="424" text-anchor="middle" class="sub">deduplicated · capped at 30 entries</text>
+  <line x1="600" y1="340" x2="600" y2="422" class="arrow-amber"/>
 
-  <!-- ===== BOTTOM: KNOWLEDGE STRUCTURE ===== -->
-  <rect x="60" y="390" width="420" height="100" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="80" y="410" class="code">~/.claude/</text>
-  <text x="80" y="428" class="code" fill="#94a3b8">├── skills-knowledge.md</text>
-  <text x="80" y="428" dx="190" class="sub">← global principles (≤ 20)</text>
-  <text x="80" y="446" class="code" fill="#94a3b8">└── skills/</text>
-  <text x="80" y="464" class="code" fill="#7dd3fc">    ├── browser-use/KNOWLEDGE.md</text>
-  <text x="80" y="464" dx="240" class="sub">← per-skill (≤ 30)</text>
-  <text x="80" y="480" class="code" fill="#7dd3fc">    └── {any-skill}/KNOWLEDGE.md</text>
-  <text x="80" y="480" dx="240" class="sub">← auto-created</text>
+  <text x="600" y="558" text-anchor="middle" class="section">SHARED STORAGE LAYOUT</text>
+  <rect x="190" y="578" width="820" height="98" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
+  <text x="222" y="602" class="code">&lt;memory-home&gt;/</text>
+  <text x="222" y="622" class="code">├── global/KNOWLEDGE.md</text>
+  <text x="458" y="622" class="sub">← cross-skill principles</text>
+  <text x="222" y="642" class="code">└── skills/&lt;skill&gt;/KNOWLEDGE.md</text>
+  <text x="458" y="642" class="sub">← distilled reusable lessons</text>
+  <text x="222" y="662" class="code">└── skills/&lt;skill&gt;/CHECKPOINTS.md</text>
+  <text x="458" y="662" class="sub">← raw notes, only promoted by explicit flush</text>
 
-  <!-- Connect bottom to flows -->
-  <line x1="330" y1="274" x2="330" y2="390" class="arrow-green" stroke-dasharray="4,3"/>
-  <line x1="670" y1="434" x2="490" y2="445" class="arrow-green" stroke-dasharray="4,3"/>
-
-  <!-- Legend -->
-  <rect x="60" y="345" width="380" height="36" rx="4" fill="#1e293b" stroke="#334155" stroke-width="1"/>
-  <rect x="74" y="357" width="10" height="10" rx="2" fill="#3b82f6"/>
-  <text x="90" y="366" class="sub" fill="#93c5fd">Injection path</text>
-  <rect x="164" y="357" width="10" height="10" rx="2" fill="#8b5cf6"/>
-  <text x="180" y="366" class="sub" fill="#c4b5fd">Hook trigger</text>
-  <rect x="254" y="357" width="10" height="10" rx="2" fill="#10b981"/>
-  <text x="270" y="366" class="sub" fill="#6ee7b7">Distillation path</text>
-  <rect x="358" y="357" width="10" height="10" rx="2" fill="#f59e0b"/>
-  <text x="374" y="366" class="sub" fill="#fcd34d">LLM call</text>
+  <line x1="533" y1="204" x2="410" y2="578" class="arrow-green" stroke-dasharray="5,4"/>
+  <line x1="533" y1="204" x2="790" y2="578" class="arrow-green" stroke-dasharray="5,4"/>
 </svg>

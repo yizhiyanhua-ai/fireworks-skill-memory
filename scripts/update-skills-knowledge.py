@@ -48,27 +48,48 @@ Add to ~/.claude/settings.json under hooks.Stop:
 
 Configuration (env vars, optional)
 -----------------------------------
-SKILLS_KNOWLEDGE_DIR     Path to skills directory
-                         Default: ~/.claude/skills
-SKILLS_KNOWLEDGE_GLOBAL  Path to the global knowledge file
-                         Default: ~/.claude/skills-knowledge.md
-SKILLS_KNOWLEDGE_MODEL   Claude model used for distillation
-                         Default: claude-haiku-4-5
-GLOBAL_MAX               Max entries in the global file   (default: 20)
-SKILL_MAX                Max entries per skill file        (default: 30)
-TRANSCRIPT_LINES         How many recent transcript lines to scan (default: 300)
-MIN_TOOL_CALLS           Min tool calls required to proceed (default: 5)
-                         Sessions below this threshold are likely summary-only
-                         and will be skipped to avoid low-quality distillation.
+SKILLS_KNOWLEDGE_DIR      Path to skills directory
+                          Default: ~/.claude/skills
+SKILLS_KNOWLEDGE_GLOBAL   Path to the global knowledge file
+                          Default: ~/.claude/skills-knowledge.md
+SKILLS_DISTILLER_BACKEND  Distiller backend: claude-cli | openai | null
+                          Default: claude-cli
+SKILLS_KNOWLEDGE_MODEL    Primary Claude CLI distillation model
+                          Default: claude-haiku-4-5
+OPENAI_API_KEY            API key for the OpenAI distiller backend
+OPENAI_BASE_URL           Base URL for OpenAI-compatible APIs
+                          Default: https://api.openai.com/v1
+OPENAI_MODEL              Model for the OpenAI distiller backend
+                          Default: gpt-5.4
+SKILLS_DISTILLER_DEBUG    When true, write backend debug logs
+SKILLS_DISTILLER_LOG      Override distiller debug log file path
+GLOBAL_MAX                Max entries in the global file   (default: 20)
+SKILL_MAX                 Max entries per skill file        (default: 30)
+TRANSCRIPT_LINES          How many recent transcript lines to scan (default: 300)
+MIN_TOOL_CALLS            Min tool calls required to proceed (default: 5)
+                          Sessions below this threshold are likely summary-only
+                          and will be skipped to avoid low-quality distillation.
 """
 
 import json
 import os
 import re
 import sys
-import subprocess
 from datetime import datetime
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from memory_core.store import merge_insight_text
+from memory_core.store import merge_global_insight_text
+from memory_core.distiller import get_distiller_from_env
+from memory_core.transcript import (
+    analyze_claude_transcript,
+    load_recent_transcript_lines,
+)
+from runtimes.claude_runtime import locate_session_transcript
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_FILE = Path(os.environ.get("SKILLS_MEMORY_LOG", Path.home() / ".claude" / "skill-memory.log"))
@@ -94,7 +115,6 @@ GLOBAL_KNOWLEDGE = Path(
         Path.home() / ".claude" / "skills-knowledge.md",
     )
 )
-DISTILL_MODEL = os.environ.get("SKILLS_KNOWLEDGE_MODEL", "claude-haiku-4-5")
 GLOBAL_MAX = int(os.environ.get("GLOBAL_MAX", "100"))
 SKILL_MAX = int(os.environ.get("SKILL_MAX", "100"))
 TRANSCRIPT_LINES = int(os.environ.get("TRANSCRIPT_LINES", "300"))
@@ -111,252 +131,6 @@ ERROR_SIGNAL_PATTERNS = re.compile(
     r'调试|报错|失败|修复|踩坑|回退',
     re.IGNORECASE
 )
-
-# [Opt-6] Multi-path skill detection — support skills installed under various paths
-SKILL_PATH_PATTERNS = [
-    r'/.claude/skills/([^/]+)/',
-    r'/.skills/([^/]+)/',
-    r'/.agents/skills/([^/]+)/',
-]
-
-# ── Read hook input ────────────────────────────────────────────────────────────
-try:
-    hook_input = json.loads(sys.stdin.read())
-except Exception:
-    hook_input = {}
-
-session_id = hook_input.get("session_id", "")
-if not session_id:
-    sys.exit(0)
-
-# ── Locate session transcript ──────────────────────────────────────────────────
-projects_dir = Path.home() / ".claude" / "projects"
-transcript_file: Path | None = None
-for proj_dir in projects_dir.iterdir():
-    candidate = proj_dir / f"{session_id}.jsonl"
-    if candidate.exists():
-        transcript_file = candidate
-        break
-
-if not transcript_file:
-    log(session_id, "SKIP | transcript not found")
-    sys.exit(0)
-
-# ── Parse transcript (last N lines) ───────────────────────────────────────────
-try:
-    lines = transcript_file.read_text(encoding="utf-8", errors="ignore").splitlines()[
-        -TRANSCRIPT_LINES:
-    ]
-except Exception:
-    sys.exit(0)
-
-tool_uses: list[str] = []
-assistant_texts: list[str] = []
-tool_result_texts: list[str] = []  # [Opt-5] collect tool_result blocks for error signal detection
-skill_invocations: set[str] = set()
-real_tool_call_count: int = 0  # [Opt-1] count actual tool calls (not summary lines)
-
-for raw in lines:
-    try:
-        entry = json.loads(raw)
-        msg = entry.get("message", {})
-        role = msg.get("role", "")
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            btype = block.get("type", "")
-            if role == "assistant" and btype == "tool_use":
-                name = block.get("name", "")
-                inp = block.get("input", {})
-                tool_uses.append(name)
-                real_tool_call_count += 1  # [Opt-1] count every real tool_use block
-                if name == "Skill":
-                    sn = inp.get("skill", "")
-                    if sn:
-                        skill_invocations.add(sn)
-                elif name == "Read":
-                    fp = inp.get("file_path", "")
-                    for pattern in SKILL_PATH_PATTERNS:
-                        m = re.search(pattern.replace('([^/]+)/', r'([^/]+)/SKILL\.md'), fp)
-                        if m:
-                            skill_invocations.add(m.group(1))
-                            break
-            elif role == "assistant" and btype == "text":
-                txt = block.get("text", "")
-                if len(txt) > 80:
-                    assistant_texts.append(txt[:400])
-            # [Opt-5] Collect tool_result text for error signal detection
-            elif btype == "tool_result" or (role == "tool" and btype == "text"):
-                txt = block.get("text", "")
-                if txt:
-                    tool_result_texts.append(txt[:400])
-    except Exception:
-        continue
-
-# [Opt-1] Context-compression detection:
-# A session restored from a summary has very few real tool calls in the transcript.
-# Distilling from summary text produces low-quality, generic lessons — skip it.
-if real_tool_call_count < MIN_TOOL_CALLS:
-    log(session_id, f"SKIP | tool_calls={real_tool_call_count} < MIN={MIN_TOOL_CALLS}")
-    sys.exit(0)
-
-# [Opt-5] Error-signal heuristic: only sessions with error/fix signals are worth distilling.
-# Routine sessions without debugging content produce low-quality lessons.
-all_text = " ".join(tool_uses + assistant_texts + tool_result_texts)
-has_error_signal = bool(ERROR_SIGNAL_PATTERNS.search(all_text))
-
-# Collect error snippets for higher-quality distillation prompts
-error_snippets = ""
-if has_error_signal:
-    snippets = [t for t in tool_result_texts if ERROR_SIGNAL_PATTERNS.search(t)]
-    error_snippets = "\n".join(snippets[:5])[:1500]
-
-# [Opt-8] Load session-scoped error seeds from error-seed-capture.py (covers all tools)
-session_seed_file = SEEDS_DIR / f"{session_id}.txt"
-session_seed_text = ""
-if session_seed_file.exists():
-    try:
-        session_seed_text = session_seed_file.read_text(encoding="utf-8").strip()[-2000:]
-        session_seed_file.unlink()  # Consume — don't re-use next session
-        if session_seed_text and not has_error_signal:
-            has_error_signal = True  # seeds override transcript-level signal
-        log(session_id, f"SEEDS | loaded {len(session_seed_text)} chars from session seeds")
-    except Exception:
-        pass
-
-# Merge session seeds into error_snippets
-if session_seed_text:
-    error_snippets = (session_seed_text + "\n" + error_snippets)[:2500]
-
-# Skip sessions with no skill invocations AND no error signals
-if not skill_invocations and not has_error_signal:
-    log(session_id, "SKIP | no skill invocations and no error signals")
-    sys.exit(0)
-
-log(session_id, f"START | tool_calls={real_tool_call_count} | skills={','.join(skill_invocations) or 'none'} | error_signal={has_error_signal}")
-
-# [Opt-9] Update cross-session usage stats
-if skill_invocations:
-    update_stats(skill_invocations)
-
-# ── Helper functions ───────────────────────────────────────────────────────────
-
-def read_entries(path: Path) -> list[str]:
-    """Return bullet entries (lines starting with '- ') from a knowledge file."""
-    if not path.exists():
-        return []
-    return [
-        ln.strip()
-        for ln in path.read_text(encoding="utf-8").splitlines()
-        if ln.strip().startswith("- ")
-    ]
-
-
-def _get_hit_count(entry: str) -> int:
-    """[Opt-4] Extract [HIT:N] counter from an entry, defaulting to 0."""
-    m = re.search(r"\[HIT:(\d+)\]", entry)
-    return int(m.group(1)) if m else 0
-
-
-def _set_hit_count(entry: str, count: int) -> str:
-    """[Opt-4] Set or update [HIT:N] counter in an entry."""
-    tag = f"[HIT:{count}]"
-    if re.search(r"\[HIT:\d+\]", entry):
-        return re.sub(r"\[HIT:\d+\]", tag, entry)
-    return entry + f"  {tag}"
-
-
-def _get_entry_age_months(entry: str) -> float:
-    """[Opt-7] Extract [YYYY-MM] timestamp from an entry and return age in months.
-    Returns 999 if no timestamp is found (treated as very old)."""
-    m = re.search(r"\[(\d{4})-(\d{2})\]", entry)
-    if not m:
-        return 999.0  # No timestamp = assume very old
-    try:
-        entry_year, entry_month = int(m.group(1)), int(m.group(2))
-        now = datetime.now()
-        age_months = (now.year - entry_year) * 12 + (now.month - entry_month)
-        return max(0.0, float(age_months))
-    except (ValueError, OverflowError):
-        return 999.0
-
-
-def _evict_entries(entries: list[str], max_count: int) -> list[str]:
-    """[Opt-4+7] Frequency-weighted eviction with age-based decay.
-    Combines HIT counts with age: entries older than 3 months get a penalty,
-    making them more likely to be evicted. Score = hits - age_penalty.
-    Entries with lowest combined score are evicted first."""
-    if len(entries) <= max_count:
-        return entries
-    overflow = len(entries) - max_count
-
-    def _eviction_score(entry: str, index: int) -> tuple[float, int]:
-        hits = _get_hit_count(entry)
-        age = _get_entry_age_months(entry)
-        # Age penalty: 0 for entries <= 3 months, increases linearly after
-        age_penalty = max(0.0, (age - 3.0) * 0.5)
-        score = hits - age_penalty
-        return (score, index)  # ties broken by position (older = lower index)
-
-    indexed = sorted(
-        enumerate(entries),
-        key=lambda x: _eviction_score(x[1], x[0]),
-    )
-    evict_indices = {idx for idx, _ in indexed[:overflow]}
-    return [e for i, e in enumerate(entries) if i not in evict_indices]
-
-
-def write_knowledge(
-    path: Path,
-    entries: list[str],
-    max_count: int,
-    title: str,
-    subtitle: str,
-) -> None:
-    """Write (or overwrite) a knowledge file, applying frequency-weighted eviction."""
-    entries = _evict_entries(entries, max_count)
-    now = datetime.now().strftime("%Y-%m-%d")
-    body = "\n".join(entries)
-    content = (
-        f"{title}\n\n"
-        f"> {subtitle}\n"
-        f"> Max {max_count} entries; low-frequency entries are evicted first."
-        f" Last updated: {now}\n\n"
-        f"## Entries\n\n"
-        f"{body}\n"
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-
-def merge_entries(existing: list[str], new_insights: str) -> list[str]:
-    """Append new bullet entries while deduplicating against existing ones.
-    [Opt-4] Also increments [HIT:N] counters on matched existing entries.
-    [Opt-7] Adds [YYYY-MM] timestamp prefix to new entries for age tracking."""
-    month_tag = datetime.now().strftime("[%Y-%m]")
-    for line in new_insights.splitlines():
-        line = line.strip()
-        if not line.startswith("- "):
-            continue
-        key = line[2:37].lower()
-        matched = False
-        for i, e in enumerate(existing):
-            if key[:20] in e.lower():
-                # Entry already exists — bump its hit count
-                existing[i] = _set_hit_count(e, _get_hit_count(e) + 1)
-                matched = True
-                break
-        if not matched:
-            # [Opt-7] Add [YYYY-MM] prefix if not already present
-            entry_body = line[2:]  # strip leading "- "
-            if not re.match(r"\[\d{4}-\d{2}\]", entry_body):
-                line = f"- {month_tag} {entry_body}"
-            existing.append(line)
-    return existing
-
 
 def update_stats(skills: set) -> None:
     """[Opt-9] Update cross-session skill usage stats in skill-usage-stats.json."""
@@ -375,39 +149,82 @@ def update_stats(skills: set) -> None:
         pass
 
 
-def ask_model(prompt: str) -> str:
-    """Call the distillation model via the Claude CLI, with model fallback."""
-    # [Opt-8] Fallback chain: if primary model fails, try next in list
-    model_env = os.environ.get("SKILLS_KNOWLEDGE_MODEL", "")
-    fallback_models = [
-        model_env,
-        "claude-haiku-4-5",
-        "claude-haiku-4-5-20251001",
-        "claude-haiku-3-5",
-    ]
-    # Deduplicate while preserving order, skip empty
-    seen = set()
-    models = []
-    for m in fallback_models:
-        if m and m not in seen:
-            seen.add(m)
-            models.append(m)
+def ask_model(prompt: str, session_id: str) -> str:
+    """Call the selected distillation backend via the shared distiller interface."""
+    primary_model = os.environ.get("SKILLS_KNOWLEDGE_MODEL", "claude-haiku-4-5")
+    distiller = get_distiller_from_env()
+    result = distiller.distill(prompt, timeout=30)
+    if result.backend == "claude-cli" and result.model and result.model != primary_model:
+        log(session_id, f"FALLBACK | used model={result.model} (primary failed)")
+    if result.backend != "claude-cli" and result.model:
+        log(session_id, f"DISTILLER | backend={result.backend} model={result.model}")
+    if result.error:
+        log(session_id, f"DISTILLER_ERR | backend={result.backend} error={result.error[:180]}")
+        if result.raw_preview:
+            preview = result.raw_preview[:220].replace("\n", " ")
+            log(session_id, f"DISTILLER_RAW | backend={result.backend} preview={preview}")
+    return result.text
 
-    for model in models:
-        try:
-            result = subprocess.run(
-                ["claude", "-p", prompt, "--model", model],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                if model != models[0]:
-                    log(session_id, f"FALLBACK | used model={model} (primary failed)")
-                return result.stdout.strip()
-        except Exception:
-            continue
-    return "SKIP"
+
+# ── Read hook input ────────────────────────────────────────────────────────────
+try:
+    hook_input = json.loads(sys.stdin.read())
+except Exception:
+    hook_input = {}
+
+session_id = hook_input.get("session_id", "")
+if not session_id:
+    sys.exit(0)
+
+# ── Locate session transcript ──────────────────────────────────────────────────
+transcript_file = locate_session_transcript(session_id)
+if not transcript_file:
+    log(session_id, "SKIP | transcript not found")
+    sys.exit(0)
+
+# ── Parse transcript (last N lines) ───────────────────────────────────────────
+try:
+    lines = load_recent_transcript_lines(transcript_file, TRANSCRIPT_LINES)
+except Exception:
+    sys.exit(0)
+
+analysis = analyze_claude_transcript(lines, error_signal_patterns=ERROR_SIGNAL_PATTERNS)
+tool_uses = analysis.tool_uses
+assistant_texts = analysis.assistant_texts
+tool_result_texts = analysis.tool_result_texts
+skill_invocations = analysis.skill_invocations
+real_tool_call_count = analysis.real_tool_call_count
+
+if real_tool_call_count < MIN_TOOL_CALLS:
+    log(session_id, f"SKIP | tool_calls={real_tool_call_count} < MIN={MIN_TOOL_CALLS}")
+    sys.exit(0)
+
+has_error_signal = analysis.has_error_signal
+error_snippets = analysis.error_snippets
+
+session_seed_file = SEEDS_DIR / f"{session_id}.txt"
+session_seed_text = ""
+if session_seed_file.exists():
+    try:
+        session_seed_text = session_seed_file.read_text(encoding="utf-8").strip()[-2000:]
+        session_seed_file.unlink()
+        if session_seed_text and not has_error_signal:
+            has_error_signal = True
+        log(session_id, f"SEEDS | loaded {len(session_seed_text)} chars from session seeds")
+    except Exception:
+        pass
+
+if session_seed_text:
+    error_snippets = (session_seed_text + "\n" + error_snippets)[:2500]
+
+if not skill_invocations and not has_error_signal:
+    log(session_id, "SKIP | no skill invocations and no error signals")
+    sys.exit(0)
+
+log(session_id, f"START | tool_calls={real_tool_call_count} | skills={','.join(skill_invocations) or 'none'} | error_signal={has_error_signal}")
+
+if skill_invocations:
+    update_stats(skill_invocations)
 
 
 # ── Update per-skill KNOWLEDGE.md files ───────────────────────────────────────
@@ -417,7 +234,11 @@ for skill_name in skill_invocations:
         continue
 
     knowledge_file = skill_dir / "KNOWLEDGE.md"
-    existing = read_entries(knowledge_file)
+    existing = [
+        ln.strip()
+        for ln in knowledge_file.read_text(encoding="utf-8").splitlines()
+        if ln.strip().startswith("- ")
+    ] if knowledge_file.exists() else []
     context = "\n".join(assistant_texts[:6])
     tools = ", ".join(set(tool_uses[:15]))
 
@@ -466,24 +287,31 @@ for skill_name in skill_invocations:
         f"Output only the bullet list or SKIP."
     )
 
-    insights = ask_model(prompt)
+    insights = ask_model(prompt, session_id)
     if insights and insights != "SKIP" and insights.startswith("-"):
-        existing = merge_entries(existing, insights)
-        write_knowledge(
-            knowledge_file,
-            existing,
-            SKILL_MAX,
-            f"# {skill_name} — experience",
-            f"Hands-on API/tool experience accumulated while using the {skill_name} skill.",
+        merge_insight_text(
+            skill_name,
+            insights,
+            max_count=SKILL_MAX,
+            target="legacy",
         )
-        log(session_id, f"UPDATED | skill={skill_name} | entries={len(existing)}")
+        updated_entries = [
+            ln.strip()
+            for ln in knowledge_file.read_text(encoding="utf-8").splitlines()
+            if ln.strip().startswith("- ")
+        ] if knowledge_file.exists() else []
+        log(session_id, f"UPDATED | skill={skill_name} | entries={len(updated_entries)}")
     else:
         log(session_id, f"SKIP | skill={skill_name} | haiku={insights[:40] if insights else 'empty'}")
 
 # ── Update global cross-skill knowledge file ──────────────────────────────────
 # [Opt-5] Only distill global knowledge when error signals are present AND skills were used
 if has_error_signal and len(skill_invocations) > 0:
-    global_existing = read_entries(GLOBAL_KNOWLEDGE)
+    global_existing = [
+        ln.strip()
+        for ln in GLOBAL_KNOWLEDGE.read_text(encoding="utf-8").splitlines()
+        if ln.strip().startswith("- ")
+    ] if GLOBAL_KNOWLEDGE.exists() else []
     context = "\n".join(assistant_texts[:4])
 
     global_prompt = (
@@ -499,24 +327,15 @@ if has_error_signal and len(skill_invocations) > 0:
         "If yes, output 1-2 entries starting with '- [Tag]'; otherwise output only: SKIP."
     )
 
-    global_insights = ask_model(global_prompt)
+    global_insights = ask_model(global_prompt, session_id)
     if global_insights and global_insights != "SKIP" and global_insights.startswith("-"):
-        global_existing = merge_entries(global_existing, global_insights)
-        if len(global_existing) > GLOBAL_MAX:
-            global_existing = global_existing[-GLOBAL_MAX:]
-        now = datetime.now().strftime("%Y-%m-%d")
-        header = (
-            "# Global Skills Principles\n\n"
-            "> **Scope**: Cross-skill principles and quality guidelines.\n"
-            "> For skill-specific API details, see each skill's `KNOWLEDGE.md`.\n"
-            f"> Auto-maintained. Max {GLOBAL_MAX} entries. Last updated: {now}\n\n"
-            "## Principles\n\n"
-        )
-        GLOBAL_KNOWLEDGE.write_text(
-            header + "\n".join(global_existing) + "\n",
-            encoding="utf-8",
-        )
-        log(session_id, f"UPDATED | global | entries={len(global_existing)}")
+        merge_global_insight_text(global_insights, max_count=GLOBAL_MAX)
+        refreshed_global = [
+            ln.strip()
+            for ln in GLOBAL_KNOWLEDGE.read_text(encoding="utf-8").splitlines()
+            if ln.strip().startswith("- ")
+        ] if GLOBAL_KNOWLEDGE.exists() else []
+        log(session_id, f"UPDATED | global | entries={len(refreshed_global)}")
     else:
         log(session_id, f"SKIP | global | haiku={global_insights[:40] if global_insights else 'empty'}")
 

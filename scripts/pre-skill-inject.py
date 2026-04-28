@@ -16,21 +16,14 @@ Why this matters:
 """
 
 import json
-import os
-import re
 import sys
 from pathlib import Path
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-SKILLS_DIR = Path(
-    os.environ.get("SKILLS_KNOWLEDGE_DIR", Path.home() / ".claude" / "skills")
-)
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-SKILL_PATH_PATTERNS = [
-    r'/.claude/skills/([^/]+)',
-    r'/.skills/([^/]+)',
-    r'/.agents/skills/([^/]+)',
-]
+from memory_core.store import select_injection_entries
 
 # ── Read hook input ────────────────────────────────────────────────────────────
 try:
@@ -46,33 +39,10 @@ skill_name = hook_input.get("tool_input", {}).get("skill", "")
 if not skill_name:
     sys.exit(0)
 
-# Strip namespace prefix (e.g. "document-skills:pdf" → "pdf", "baoyu-translate" → "baoyu-translate")
-# Try exact match first, then strip namespace
-def find_skill_dir(name: str) -> Path | None:
-    # Direct match
-    candidate = SKILLS_DIR / name
-    if candidate.exists():
-        return candidate
-    # Strip namespace (e.g. "ns:skill" → "skill")
-    if ":" in name:
-        short = name.split(":")[-1]
-        candidate = SKILLS_DIR / short
-        if candidate.exists():
-            return candidate
-    return None
-
-skill_dir = find_skill_dir(skill_name)
-if not skill_dir:
+entries = select_injection_entries(skill_name)
+if not entries:
     sys.exit(0)
-
-# ── Load KNOWLEDGE.md ──────────────────────────────────────────────────────────
-knowledge_file = skill_dir / "KNOWLEDGE.md"
-if not knowledge_file.exists():
-    sys.exit(0)
-
-knowledge_content = knowledge_file.read_text(encoding="utf-8").strip()
-if not knowledge_content:
-    sys.exit(0)
+injection_body = "\n".join(entries)
 
 # ── Inject into model context ──────────────────────────────────────────────────
 output = {
@@ -81,7 +51,7 @@ output = {
         "additionalContext": (
             f"\n---\n"
             f"📚 **[fireworks-skill-memory] {skill_name} — past experience** (pre-execution inject)\n\n"
-            f"{knowledge_content}\n"
+            f"{injection_body}\n"
             f"---\n"
         ),
     }
